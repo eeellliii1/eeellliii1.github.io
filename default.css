@@ -7,3 +7,20 @@ img
 {
     border: 6px solid #5D6063;
 }
+
+.container
+{
+    align-items: center;
+    display: flex;
+}
+
+p
+{
+    font: helvetica;
+    font-size: 10pt;
+}
+
+.indentText
+{
+    padding-left: 5px;
+}
