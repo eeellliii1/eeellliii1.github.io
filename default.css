@@ -3,3 +3,7 @@ body
     background-color: lightgreen;
 }
 
+img
+{
+    border: 6px solid #5D6063;
+}
