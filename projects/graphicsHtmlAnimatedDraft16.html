@@ -1,0 +1,993 @@
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+
+
+.chart 
+{
+	position: relative;
+  	height: 100%;
+  	width: 100%;
+}
+
+.buttonBar 
+{
+	position: relative;
+}
+
+.inputCol
+{
+	position: absolute;
+	left: 0%;
+  	width: 33%;
+	height: 100%;
+}
+
+.neuronCol
+{
+	position: absolute;
+	left: 0%;
+  	width: 33%;
+	height: 100%;
+	overflow: hidden;
+}
+
+.outputCol
+{
+	position: absolute;
+	left: 0%;
+  	width: 33%;
+	height: 100%;
+	
+}
+
+.input
+{
+	position: absolute;
+	top: 10%;
+	left: 0%;
+	display: inline-block;
+	width: 12%;
+	padding-top: 5%;
+	border-radius: 50%;
+	opacity: 1;
+	background-color: white;
+	border: 2%;
+	border-color: black; 
+	border-style: solid;
+}
+
+.input:hover
+{
+	border-color: grey;
+}
+
+.neuron
+{
+	position: absolute;
+	top: 0%;
+	left: 0%;
+	display: inline-block;
+	overflow: hidden;
+	width: 12%;
+	padding-top: 5%;
+	border-radius: 50%;
+	opacity: 1;
+	background-color: blue;
+	border-color:black;
+	border-style: solid;
+}
+
+.neuron:hover
+{
+	background-color: lightblue;
+	border-color: grey;
+}
+
+.output
+{
+	position: absolute;
+	top: 10%;
+	left: 0%;
+	display: inline-block;
+	width: 12%;
+	padding-top: 5%;
+	border-radius: 50%;
+	opacity: 1;
+	background-color: green;
+	border: 2%;
+	border-color: black; 
+	border-style: solid;
+}
+
+.output:hover
+{
+	background-color: lightgreen;
+	border-color: grey;
+}
+
+</style>
+
+<script src = "https://d3js.org/d3.v4.min.js"></script>
+
+</head>
+
+<body>
+
+<!-- Display the stuff -->
+<h2>Javascript Variable Input</h2>
+
+<div id="chart" class="chart">
+		<div id="inputCol" class="inputCol">
+		</div>
+	
+		<div id="outputCol" class="outputCol"></div>
+
+		<svg height="100%" width="100%">
+			<g id="pen" stroke-width="0.1%"></g>
+		</svg>
+
+		<button onclick="learn()">One Step Forward</button>
+		<button onclick="learnPlay(10)">Play</button>
+		<button onclick="learnPause()">Pause</button>
+		<button onclick="reset()">Reset</button>
+
+		<div id="valHolder" inp="4" neu="3" out="1" neuCols="2"></div>
+		<div id="mathHolder" type="2" inputs="0.35,0.9,-0.7,0.3" outs="0.2" rate="1" threshold="0"></div>
+		<div id="testVals" active="0" weights="0.1,0.4,0.8,0.6,0.3,0.9"></div> 
+		<div id="animHolder" step="-1" node="0"></div>
+</div>
+
+<script>
+/*
+	TODO: BUTTONS AND ANIMATION
+	-ideas: 
+*/
+
+var timer;
+
+// Draws all of the lines and nodes
+function drawScaleElements()
+{
+	var animVals = document.getElementById("animHolder");
+	animVals.setAttribute('step', '-1');
+	animVals.setAttribute('node', '0');
+	
+	d3.selectAll("line").remove();
+
+	var chart = document.getElementById("chart");
+	
+	document.getElementById("inputCol").remove();
+	
+	var neuCol = document.getElementsByName("neuronCol");
+	for(var i = neuCol.length - 1; i >= 0; i--)
+	{
+		neuCol[i].parentNode.removeChild(neuCol[i]);
+	}
+
+	document.getElementById("outputCol").remove();
+
+	// Get the number of each type of node as well as the number of hidden layers
+	var inpNodes = parseInt(document.getElementById("valHolder").getAttribute('inp'), 10);
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10);
+	var neuNodes = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10);
+	var outNodes = parseInt(document.getElementById("valHolder").getAttribute('out'), 10);	
+
+	// Get information from the math holder div (used for storing inputs and desired outputs as well and such)
+	var neuType = parseInt(document.getElementById("mathHolder").getAttribute('type'), 10);
+	var inputVals = commaStringToFloats(document.getElementById("mathHolder").getAttribute('inputs'));
+	var idealOutVals = commaStringToFloats(document.getElementById("mathHolder").getAttribute('outs'));
+
+	// Create arrays to hold the y positions for nodes
+	var inputCordsY = [];
+	var neuronCordsY = [];
+	var outputCordsY = [];
+
+	///var inputNodes = []; //
+	///var neuronNodes = []; //
+	///var outputNodes = []; //
+
+	var colStep = 100 / (hiddenCols + 2);
+	var colX = colStep;
+
+	
+	// Create the column for the output nodes
+	var outputCol = document.createElement('outputCol');
+	outputCol.className = 'outputCol';
+	outputCol.setAttribute('id', 'outputCol');
+	outputCol.style.width = '' + colStep + '%';
+	outputCol.style.left = '' + (100 - colX) + '%';
+	chart.prepend(outputCol);
+	colX += colStep;
+
+	// Prepend the desired number of hidden layers
+	for(var i = 0; i < hiddenCols; i++)
+	{
+		var neuronCol = document.createElement('neuronCol');
+		neuronCol.className = 'neuronCol';
+		neuronCol.setAttribute('name', 'neuronCol');
+		neuronCol.style.width = '' + colStep + '%';
+		neuronCol.style.left = '' + (100 - colX) + '%';
+		chart.prepend(neuronCol);	
+		colX += colStep;				
+	}
+
+	// Prepend the input column
+	var inputCol = document.createElement('inputCol');
+	inputCol.className = 'inputCol';
+	inputCol.setAttribute('id', 'inputCol');
+	inputCol.style.width = '' + colStep + '%';
+	inputCol.style.left = '' + (100 - colX) + '%';
+	chart.prepend(inputCol);
+
+	// Add the input nodes to the input column
+	var startY = 10;
+	var newY = startY;
+	step = 10;
+
+	for(var i = 0; i < inpNodes; i++)
+	{
+		newY += step; 
+		var node = document.createElement('node');
+		node.className = 'input';
+		node.setAttribute('name', 'inputNode');
+		node.style.top = '' + newY + '%';
+		inputCol.appendChild(node);	
+		inputCordsY.push(newY);
+
+		// Add the required svg to display text inside node
+		var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('width', '100%');
+		svg.setAttribute('viewBox', '0 0 80 50');
+		svg.setAttribute('position', 'absolute');
+		svg.setAttribute('overflow', 'visible');
+		node.appendChild(svg);
+			
+		// Add text to the node
+		var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+		text.setAttribute('x', '50%');
+		text.setAttribute('y', '50%');
+		text.setAttribute('position', 'absolute');
+		text.setAttribute('stroke', 'black');
+		text.setAttribute('stroke-width', '1%');
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('display', 'block');
+		text.setAttribute('fill', 'black');
+		text.textContent = '' + inputVals[i]; 
+		svg.appendChild(text);
+		
+	}
+
+	// Add all the neruons
+	startY = 0;
+	newY = startY;
+	step = 10;
+	
+	var neuronCols = document.getElementsByName("neuronCol");
+
+	for(i = 0; i < neuNodes; i++)
+	{
+		newY += step; 
+		var node = document.createElement('node');
+		node.setAttribute('name', 'neuron');
+		node.className = 'neuron';
+		node.style.top = '' + newY + '%';
+		node.setAttribute('out', '0'); // the output calculated using the inputs also will correspond to the text content
+		node.setAttribute('adjust', '0'); // the amount to adjust weights by with backprop
+
+		for(var j = 0; j < neuronCols.length; j++)
+		{
+			var nodeCopy = node.cloneNode(true);
+			neuronCols[j].appendChild(nodeCopy);
+				
+			var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+			svg.setAttribute('width', '100%');
+			svg.setAttribute('viewBox', '0 0 80 50');
+			svg.setAttribute('position', 'absolute');
+			svg.setAttribute('overflow', 'visible');
+			nodeCopy.appendChild(svg);
+			
+			var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('x', '50%');
+			text.setAttribute('y', '50%');
+			text.setAttribute('name', 'neuText');
+			text.setAttribute('position', 'absolute');
+			text.setAttribute('stroke', 'yellow');
+			text.setAttribute('stroke-width', '1%');
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('display', 'block');
+			text.setAttribute('fill', 'yellow');
+			text.textContent = '0';
+			svg.appendChild(text);
+			
+		}	
+		neuronCordsY.push(newY);
+	}
+
+	// Add all the ouptputs
+	startY = 10;
+	newY = startY;
+	step = 10;
+
+	var outputCol = document.getElementById("outputCol");
+
+	for(i = 0; i < outNodes; i++)
+	{
+		newY += step; 
+		var node = document.createElement('node');
+		node.className = 'output';
+		node.setAttribute('name', 'neuron'); // so it can be updated via functions
+		node.style.top = '' + newY + '%';
+		node.setAttribute('adjust', '0');
+		node.setAttribute('output', ''); // the output
+		node.setAttribute('prevLines', ''); // the lines that connect to this node
+
+		outputCol.appendChild(node);	
+		outputCordsY.push(newY);
+
+		// Add the required svg to display text inside node
+		var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('width', '100%');
+		svg.setAttribute('viewBox', '0 0 80 50');
+		svg.setAttribute('position', 'absolute');
+		svg.setAttribute('overflow', 'visible');
+		node.appendChild(svg);
+			
+		// Add text to the node
+		var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+		text.setAttribute('x', '50%');
+		text.setAttribute('y', '50%');
+		text.setAttribute('name', 'neuText');
+		text.setAttribute('position', 'absolute');
+		text.setAttribute('stroke', 'white');
+		text.setAttribute('stroke-width', '1%');
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('display', 'block');
+		text.setAttribute('fill', 'white');
+		text.textContent = '0'; 
+		svg.appendChild(text);
+	}
+
+	// Get manual testing info if there is any
+	var testInf = document.getElementById("testVals");
+	var manualWeights = manaulWeights = commaStringToFloats(testInf.getAttribute('weights'));
+	var testActive = parseInt(testInf.getAttribute('active'), 10);
+	var lineNum = 0;
+
+	// Draw all of the lines connecting input to neurons
+	var y1;
+	var y2;
+	var pen = document.getElementById("pen");
+	for(i = 0; i < inputCordsY.length; i++)
+	{
+		y1 = inputCordsY[i];
+		var pen = document.getElementById("pen");
+		for(var j = 0; j < neuronCordsY.length; j++)
+		{
+			
+			y2 = neuronCordsY[j];
+
+			var newLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+			newLine.setAttribute('x1', '' + (colStep * 0.12) + '%');
+			newLine.setAttribute('y1', '' + (y1 + (colStep * 0.06)) + '%');
+			newLine.setAttribute('x2', '' + colStep + '%');
+			newLine.setAttribute('y2', '' + (y2 + (colStep * 0.06))  + '%');
+			newLine.setAttribute('name', 'inLine');
+
+			// If there is a manual test active, use the line weights provided
+			var weight;
+			if(testActive == 0)
+			{
+				weight = (Math.random() * 2) - 1;
+			}
+			else
+			{
+				weight = manualWeights[lineNum];
+				lineNum++;
+			}
+			newLine.setAttribute('weight', '' + weight);
+			var colorVal = normalize(-1, 1, 0, 1, weight);
+			newLine.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));
+			pen.appendChild(newLine);
+		}
+	}
+	
+	// Add all of the lines between hidden layers
+	for(i = 1; i < hiddenCols; i++)
+	{
+		for(var j = 0; j < neuronCordsY.length; j++)
+		{
+			var thisY = neuronCordsY[j]
+			for(var k = 0; k < neuronCordsY.length; k++)
+			{
+
+				var y = neuronCordsY[k];
+
+				var newLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+				newLine.setAttribute('x1', '' + (colStep * i) + '%');
+				newLine.setAttribute('y1', '' + (thisY + (colStep * 0.06)) + '%');
+				newLine.setAttribute('x2', '' + (colStep * (i + 1)) + '%');
+				newLine.setAttribute('y2', '' + (y + (colStep * 0.06)) + '%');
+				newLine.setAttribute('name', 'line');
+
+				// If there is a manual test active, use the line weights provided
+				var weight;
+				if(testActive == 0)
+				{
+					weight = (Math.random() * 2) - 1;
+				}
+				else
+				{
+					weight = manualWeights[lineNum];
+					lineNum++;
+				}
+				newLine.setAttribute('weight', '' + weight);
+				var colorVal = normalize(-1, 1, 0, 1, weight);
+				newLine.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));
+				pen.appendChild(newLine);
+			}
+		}
+	}
+
+	// Draw the lines from the neurons to the outputs
+	for(i = 0; i < neuronCordsY.length; i++)
+	{
+		y1 = neuronCordsY[i];
+		for(var j = 0; j < outputCordsY.length; j++)
+		{
+			
+			y2 = outputCordsY[j];	
+
+			var newLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+			newLine.setAttribute('x1', '' + ((colStep * hiddenCols) + (colStep * 0.06)) + '%');
+			newLine.setAttribute('y1', '' + (y1 + (colStep * 0.06)) + '%');
+			newLine.setAttribute('x2', '' + (colStep * (hiddenCols + 1)) + '%');
+			newLine.setAttribute('y2', '' + (y2 + (colStep * 0.06)) + '%');
+			newLine.setAttribute('name', 'line');
+
+			// If there is a manual test active, use the line weights provided
+			var weight;
+			if(testActive == 0)
+			{
+				weight = (Math.random() * 2) - 1;
+			}
+			else
+			{
+				weight = manualWeights[lineNum];
+				lineNum++;
+			}
+			newLine.setAttribute('weight', '' + weight);
+			var colorVal = normalize(-1, 1, 0, 1, weight);
+			newLine.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));
+			pen.appendChild(newLine);		
+		}
+	}
+}
+
+function updatePerceptron(nodes, texts, inLines, lines, nodeNum)
+{
+	var threshold = parseInt(document.getElementById("mathHolder").getAttribute('threshold'), 10); //get the perceptron threshold
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10); //how many hidden layers
+	var neurons = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10); //how many neruons per col
+
+	var node = nodes[nodeNum + neurons]; //
+	var text = texts[nodeNum + neurons]; //
+
+	var sum = 0; // the weighted sum for the perceptron
+
+	if(nodeNum < 0) //if the neuron is in the first hidden col, we need to look at inputs
+	{
+		var inputs = commaStringToFloats(document.getElementById("mathHolder").getAttribute('set').inputs);
+		
+		for(var i = 0; i < inputs.length; i++)
+		{
+			sum += ((parseFloat(inLines[(nodeNum + neurons) + (i * neurons)].getAttribute('weight'), 10) * inputs[i]));		
+		}	
+	}
+	else if((nodeNum + neurons) >= (neurons * hiddenCols)) // see if this neuron is an output
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+
+		var prevCol = Math.floor((nodeNum + neurons) / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = (nodeNum + neurons) - ((prevCol + 1) * neurons);
+		var lineColStart = prevCol * neurons * neurons;
+
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			////alert('' + sum);
+			sum += ((parseFloat(lines[(i * outputs) + lineColStart + rowNum].getAttribute('weight'))) * (parseFloat(nodes[prevColStart + i].getAttribute('out'))));
+		} 
+	}
+	else //if the neuron is not one of the first few or the last, we go as normal
+	{
+		var outputs = document.getElementById("mathHolder").getAttribute('outs').length;
+		
+		var prevCol = Math.floor((nodeNum + neurons) / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = (nodeNum + neurons) - ((prevCol + 1) * neurons);
+
+		lineColStart = prevCol * neurons;
+			
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			////alert('' + rowNum);
+			sum += ((parseFloat(lines[(prevColStart * neurons) + (i * neurons) + rowNum].getAttribute('weight')) * (parseFloat(nodes[prevColStart + i].getAttribute('out')))));  
+		} 
+	}
+
+	var out = -1;	
+	if(sum >= threshold)
+	{
+		out = 1;
+	}
+
+	// Output -1 or 1 based on the threshold and weighted sum
+	node.setAttribute('out', '' + out);
+	text.textContent = ('' + out);
+	
+	/*
+	var bias = 0;  //NEEDED?	
+	////alert('Node ' + (nodeNum + neurons) + ' with sum of ' + (sum + bias));
+	node.setAttribute('out', '' + (Math.round((sum + bias) * 1000) / 1000));
+	text.textContent = '' + (Math.round((sum + bias) * 1000) / 1000);
+	*/
+}
+
+function updateSigmoid(nodes, texts, inLines, lines, nodeNum)
+{
+	var threshold = parseInt(document.getElementById("mathHolder").getAttribute('threshold'), 10); //get the perceptron threshold
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10); //how many hidden layers
+	var neurons = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10); //how many neruons per col
+
+	var node = nodes[nodeNum + neurons]; //
+	var text = texts[nodeNum + neurons]; //
+
+	var sum = 0; // the weighted sum for the perceptron
+
+	if(nodeNum < 0) //if the neuron is in the first hidden col, we need to look at inputs
+	{
+		var inputs = commaStringToFloats(document.getElementById("mathHolder").getAttribute('inputs'));
+		
+		for(var i = 0; i < inputs.length; i++)
+		{
+			sum += ((parseFloat(inLines[(nodeNum + neurons) + (i * neurons)].getAttribute('weight')) * inputs[i]));		
+		}	
+	}
+	else if((nodeNum + neurons) >= (neurons * hiddenCols)) // see if this neuron is an output
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+
+		var prevCol = Math.floor((nodeNum + neurons) / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = (nodeNum + neurons) - ((prevCol + 1) * neurons);
+		var lineColStart = prevCol * neurons * neurons;
+
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			////alert('' + sum);
+			sum += ((parseFloat(lines[(i * outputs) + lineColStart + rowNum].getAttribute('weight'))) * (parseFloat(nodes[prevColStart + i].getAttribute('out'))));
+		} 
+	}
+	else //if the neuron is not one of the first few or the last, we go as normal
+	{
+		var outputs = document.getElementById("mathHolder").getAttribute('outs').length;
+		
+		var prevCol = Math.floor((nodeNum + neurons) / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = (nodeNum + neurons) - ((prevCol + 1) * neurons);
+
+		lineColStart = prevCol * neurons;
+			
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			////alert('' + rowNum);
+			sum += ((parseFloat(lines[(prevColStart * neurons) + (i * neurons) + rowNum].getAttribute('weight'), 10) * (parseFloat(nodes[prevColStart + i].getAttribute('out')))));  
+		} 
+	}
+
+	var out = 1.0 / (1.0 + Math.exp(-1.0 * sum));	
+	
+	node.setAttribute('out', '' + out);
+	text.textContent = ('' + (Math.round(out * 1000) / 1000));
+}
+
+function adjustSigmoid(nodes, texts, inLines, lines, nodeNum) //go down and adjust lines
+{
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10); //how many hidden layers
+	var neurons = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10); //how many neruons per col
+	var learnRate = parseFloat(document.getElementById("mathHolder").getAttribute('rate'));
+	var target = parseFloat(document.getElementById("mathHolder").getAttribute('outs'));
+
+	var node = nodes[nodeNum]; //
+	var text = texts[nodeNum]; //
+
+	if(nodeNum >= (neurons * hiddenCols)) // see if this neuron is an output
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+
+		var prevCol = Math.floor(nodeNum / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = nodeNum - ((prevCol + 1) * neurons);
+		var lineColStart = prevCol * neurons * neurons;
+
+		// Adjust 'adjust values' of nodes and weights of lines
+		for(var i = 0; i < neurons; i++)
+		{
+			// Set the 'adjust' for this node as its an output
+			var thisOut = parseFloat(node.getAttribute('out'));
+			node.setAttribute('adjust', '' + (thisOut * (learnRate - thisOut) * (target - thisOut)));
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+
+
+			// Get connecting line info
+			var line = lines[(i * outputs) + lineColStart + rowNum];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+				
+			// Adjust the 'adjust value' for the previous node
+			var prevNode = nodes[prevColStart + i];
+			prevOut = parseFloat(prevNode.getAttribute('out'));
+			prevNode.setAttribute('adjust', '' + (prevOut * (learnRate - prevOut) * lineWeight * curAdjust));
+			
+		} 
+	}
+	else if(nodeNum < neurons) //if the neuron is in the first hidden col, we only adjust lines not nodes
+	{
+		var inputs = commaStringToFloats(document.getElementById("mathHolder").getAttribute('inputs'));
+		
+		for(var i = 0; i < inputs.length; i++)
+		{
+			var line = inLines[nodeNum + (i * neurons)];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+		}	
+	}
+	else //if the neuron is not an output, we go as normal
+	{
+		var outputs = document.getElementById("mathHolder").getAttribute('outs').length;
+		
+		var prevCol = Math.floor(nodeNum / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = nodeNum - ((prevCol + 1) * neurons);
+
+		lineColStart = prevCol * neurons;
+			
+		// Adjust 'adjust values' of nodes and weights of lines
+		for(var i = 0; i < neurons; i++)
+		{
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+
+			var line = lines[(prevColStart * neurons) + (i * neurons) + rowNum];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+			var prevNode = nodes[prevColStart + i];
+			prevOut = parseFloat(prevNode.getAttribute('out'));
+
+			// Adjust the 'adjust value' for the previous node
+			prevNode.setAttribute('adjust', '' + (prevOut * (learnRate - prevOut) * lineWeight * curAdjust));
+		} 
+	}
+}
+
+function adjustSigmoidLines(nodes, texts, inLines, lines, nodeNum) //go down and adjust lines
+{
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10); //how many hidden layers
+	var neurons = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10); //how many neruons per col
+	var learnRate = parseFloat(document.getElementById("mathHolder").getAttribute('rate'));
+	var target = parseFloat(document.getElementById("mathHolder").getAttribute('outs'));
+
+	var node = nodes[nodeNum]; //
+	var text = texts[nodeNum]; //
+
+	if(nodeNum >= (neurons * hiddenCols)) // see if this neuron is an output
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+
+		var prevCol = Math.floor(nodeNum / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = nodeNum - ((prevCol + 1) * neurons);
+		var lineColStart = prevCol * neurons * neurons;
+
+		// Adjust 'adjust values' of nodes and weights of lines
+		for(var i = 0; i < neurons; i++)
+		{
+			// Set the 'adjust' for this node as its an output
+			var thisOut = parseFloat(node.getAttribute('out'));
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+
+
+			// Get connecting line info
+			var line = lines[(i * outputs) + lineColStart + rowNum];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+				
+			// Adjust the 'adjust value' for the previous node
+			var prevNode = nodes[prevColStart + i];
+			prevOut = parseFloat(prevNode.getAttribute('out'));
+			
+			// Adjust the weight of the connecting line
+			var weight = (lineWeight + (learnRate * curAdjust * prevOut));
+			line.setAttribute('weight', '' + weight);
+			
+			var colorVal = normalize(-1.0, 1.0, 0.0, 1.0, weight);
+			line.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));
+			
+		} 
+	}
+	else if(nodeNum < neurons) //if the neuron is in the first hidden col, we only adjust lines not nodes
+	{
+		var inputs = commaStringToFloats(document.getElementById("mathHolder").getAttribute('inputs'));
+		
+		for(var i = 0; i < inputs.length; i++)
+		{
+			var line = inLines[nodeNum + (i * neurons)];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+	
+			var weight = (lineWeight + (learnRate * curAdjust * inputs[i]));
+			line.setAttribute('weight', '' + weight);
+
+			var colorVal = normalize(-1, 1, 0, 1, weight);
+			line.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));	
+		}	
+	}
+	else //if the neuron is not an output, we go as normal
+	{
+		var outputs = document.getElementById("mathHolder").getAttribute('outs').length;
+		
+		var prevCol = Math.floor(nodeNum / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = nodeNum - ((prevCol + 1) * neurons);
+
+		lineColStart = prevCol * neurons;
+			
+		// Adjust 'adjust values' of nodes and weights of lines
+		for(var i = 0; i < neurons; i++)
+		{
+			var curAdjust = parseFloat(node.getAttribute('adjust'));
+
+			var line = lines[(prevColStart * neurons) + (i * neurons) + rowNum];
+			var lineWeight = parseFloat(line.getAttribute('weight'));
+			var prevNode = nodes[prevColStart + i];
+			prevOut = parseFloat(prevNode.getAttribute('out'));
+			
+			// Adjust the weight of the connecting line
+			var weight = (lineWeight + (learnRate * curAdjust * prevOut));
+			line.setAttribute('weight', '' + weight);
+			
+			var colorVal = normalize(-1, 1, 0, 1, weight);
+			line.setAttribute('stroke', percentageToHsl(colorVal, 120, 0));	
+		} 
+	}
+}
+
+/*
+function adjustPerceptron(nodes, inLines, lines, nodeNum) //go down through this perceptron's lines and adjust the weights {IN PROG}
+{
+	var hiddenCols = parseInt(document.getElementById("valHolder").getAttribute('neuCols'), 10); //how many hidden layers
+	var neurons = parseInt(document.getElementById("valHolder").getAttribute('neu'), 10); //how many neruons per col
+
+	var adjust = nodes[nodeNum].getAttribute('adjust'); // the amount to adjust each node by
+
+	var adjust = 0; // the weighted sum for the perceptron
+
+	
+	if(nodeNum >= (neurons * hiddenCols)) // see if this neuron is an output
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+
+		var prevCol = Math.floor(nodeNum / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = nodeNum  - ((prevCol + 1) * neurons);
+		var lineColStart = prevCol * neurons * neurons;
+
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			sum += ((parseFloat(lines[(i * outputs) + lineColStart + rowNum].getAttribute('weight')), 10) * (parseFloat(nodes[prevColStart + i].getAttribute('out'))));
+		} 
+	}
+	else if(nodeNum >= (neurons * (hiddenCols - 1))) //if the neuron is in the last hidden col, we need to look at output weighted lines
+	{
+		var outputs = parseInt(document.getElementById('valHolder').getAttribute('out'), 10);
+		
+		for(var i = 0; i < outputs.length; i++)
+		{
+			sum += ((parseFloat(inLines[(nodeNum + neurons) + (i * neurons)].getAttribute('weight'), 10) * inputs[i]));	
+		}	
+	}
+	else //if the neuron is not one of the first few or the last, we go as normal
+	{
+		var outputs = document.getElementById("mathHolder").getAttribute('outs').length;
+		
+		var prevCol = Math.floor((nodeNum + neurons) / neurons) - 1;
+		var prevColStart = prevCol * neurons;
+		var rowNum = (nodeNum + neurons) - ((prevCol + 1) * neurons);
+
+		lineColStart = prevCol * neurons;
+			
+		// Total up the weighted sum
+		for(var i = 0; i < neurons; i++)
+		{
+			////alert('' + rowNum);
+			sum += ((parseFloat(lines[(prevColStart * neurons) + (i * neurons) + rowNum].getAttribute('weight'), 10) * (parseFloat(nodes[prevColStart + i].getAttribute('out'))))); 
+		} 
+	}
+	node.setAttribute('adjust', '' + adjust);
+}
+*/
+	// Converts the list of inputs from strings (comma seperated with NO spaces to an array of floats)
+function commaStringToFloats(string)
+{
+	var nums = [];
+	var stringBuild = '';
+	
+	for(i = 0; i < string.length; i++)
+	{
+		if(string[i] != ',')
+		{
+			stringBuild += string[i];
+		}
+		else
+		{
+			nums.push(parseFloat(stringBuild));
+			stringBuild = '';
+		}	
+	}
+	nums.push(stringBuild);
+	return nums;
+}
+
+function learn()
+{
+	var type = parseInt(document.getElementById('mathHolder').getAttribute('type'), 10);
+	var nodes = document.getElementsByName('neuron');
+	var texts = document.getElementsByName('neuText');	
+	var targets = commaStringToFloats(document.getElementById("mathHolder").getAttribute('outs'));
+	var inLines = document.getElementsByName('inLine');
+	var lines = document.getElementsByName('line');
+	var numNeu = document.getElementById('valHolder').getAttribute('neu');
+	var inputs = inLines.length / numNeu;
+
+	var animHolder = document.getElementById('animHolder');
+	var step = parseInt(animHolder.getAttribute('step'), 10);
+	var node = parseInt(animHolder.getAttribute('node'), 10);
+
+	if(step == -1)
+	{
+		animHolder.setAttribute('step', '0');
+		animHolder.setAttribute('node', '' + (-1 * numNeu));
+		//alert('ANIMATION VALUES INITIALIZED');
+	}
+	else if(step == 0) // we are still going up the network
+	{
+		var nodeNum = parseInt(animHolder.getAttribute('node'), 10);
+		if(nodeNum < (nodes.length - numNeu))
+		{
+			if(type == 1)
+			{
+				////alert('Updating node: ' + i);
+				updatePerceptron(nodes, texts, inLines, lines, nodeNum);
+				animHolder.setAttribute('node', '' + (nodeNum + 1));
+			}
+			else if(type == 2)
+			{
+				updateSigmoid(nodes, texts, inLines, lines, nodeNum);
+				animHolder.setAttribute('node', '' + (nodeNum + 1));
+			}
+		}
+		else
+		{
+			animHolder.setAttribute('step', '1');
+			//alert('CHECKING CONVERGED');
+		}
+	}
+	else if(step == 1) // we are checking to see if we have converged
+	{
+		var converged = 0; // Will be 1 when done
+		for(var i = 0; i < targets.length; i++)
+		{
+			// add possible rounding off zeros if it gets to close
+			if(parseFloat(nodes[nodes.length - 1 - i].getAttribute('out')) == targets[targets.length - 1 - i])
+			{
+				converged = 1; //so far so good	
+			}
+			else
+			{
+				converged = 0;
+			}		
+		}
+		if(converged == 1)
+		{
+			learnPause();
+			alert("Converged");
+		}
+		else
+		{
+			animHolder.setAttribute('step', '2');
+			animHolder.setAttribute('node', '' + (nodes.length - 1));
+			//alert('ADJUSTING');
+			learn();
+		}
+	}
+	else if(step == 2) // we are adjusting weights and values
+	{
+		var nodeNum = parseInt(animHolder.getAttribute('node'), 10);
+		if(nodeNum >= 0)
+		{
+			if(type == 1)
+			{
+				//adjustPerceptron(nodes, inLines, lines, nodeNum);
+			}
+			else(type == 2)
+			{
+				adjustSigmoid(nodes, texts, inLines, lines, nodeNum);
+				animHolder.setAttribute('node', '' + (nodeNum - 1));
+			}
+		}
+		else
+		{
+			animHolder.setAttribute('step', '3');
+			animHolder.setAttribute('node', '' + (nodes.length - 1));
+		}
+	}
+	else if(step == 3) // we are adjusting weights and values
+	{
+		var nodeNum = parseInt(animHolder.getAttribute('node'), 10);
+		if(nodeNum >= 0)
+		{
+			if(type == 1)
+			{
+				//adjustPerceptron(nodes, inLines, lines, nodeNum);
+			}
+			else(type == 2)
+			{
+				adjustSigmoidLines(nodes, texts, inLines, lines, nodeNum);
+				animHolder.setAttribute('node', '' + (nodeNum - 1));
+			}
+		}
+		else
+		{
+			animHolder.setAttribute('step', '0');
+			animHolder.setAttribute('node', '' + (-1 * numNeu));
+		}
+	}	
+}
+
+function learnPlay(interval)
+{
+	timer = setInterval(learn, interval);
+}
+
+function learnPause()
+{
+	clearInterval(timer);
+}
+
+function normalize(measMin, measMax, tarMin, tarMax, meas)
+{
+	return (((meas - measMin) / (measMax - measMin)) * (tarMax - tarMin)) + tarMin;
+}
+
+function reset()
+{
+	learnPause();
+	drawScaleElements();
+}
+
+// VIA https://stackoverflow.com/questions/17525215/calculate-color-values-from-green-to-red/17527156#17527156
+	// green(120) to red(0)
+	// blue(225) to pink(315)
+	// blue (225) to yellow(45 + 360) 
+function percentageToHsl(percentage, hue0, hue1) {
+    var hue = (percentage * (hue1 - hue0)) + hue0;
+    return 'hsl(' + hue + ', 100%, 50%)';
+}
+
+drawScaleElements();
+//window.addEventListener("resize", drawScaleElements());
+//learn();
+</script>
+
+</body>
