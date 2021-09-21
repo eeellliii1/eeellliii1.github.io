@@ -3,17 +3,12 @@ body
     background-color: grey;
 }
 
-p
+li
 {
     color: coral;
 }
 
-li
+p
 {
     color: lightblue;
-}
-
-header
-{
-    color: lightgreen;
 }
